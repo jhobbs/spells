@@ -1,0 +1,12 @@
+#!/bin/bash
+
+set -eux
+
+. "$CONJURE_UP_SPELLSDIR/sdk/common.sh"
+
+deis_register_url=$(getKey "deis-register_url")
+
+echo "Registering initial admin user"
+deis register "http://deis.$hostname.nip.io" --username=$DEIS_USERNAME --password=$DEIS_PASSWORD --email=$DEIS_EMAIL
+
+exit 0

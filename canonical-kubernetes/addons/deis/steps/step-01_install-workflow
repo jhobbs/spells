@@ -1,0 +1,51 @@
+#!/bin/bash
+
+set -eux
+
+. "$CONJURE_UP_SPELLSDIR/sdk/common.sh"
+
+export KUBECONFIG=$HOME/.kube/config.$JUJU_MODEL
+
+echo "Installing Deis CLI"
+curl -fsSL -o $HOME/bin/deis  https://storage.googleapis.com/workflow-cli-release/deis-stable-linux-amd64
+chmod +x $HOME/bin/deis
+
+echo "Installing Helm CLI"
+HELM_VERSION="v2.6.0"
+curl -fsSL -o helm-stable.tar.gz https://storage.googleapis.com/kubernetes-helm/helm-"$HELM_VERSION"-linux-amd64.tar.gz
+tar -zxvf helm-stable.tar.gz
+mv linux-amd64/helm $HOME/bin/helm
+
+helm init --upgrade
+
+echo "Adding Deis chart"
+helm repo add deis https://charts.deis.com/workflow
+
+echo "Install Deis workflow"
+helm install deis/workflow --namespace deis
+
+echo "Get AWS ELB hostname"
+aws_elb_host="$(kubectl --namespace=deis get svc deis-router -ojson|jq -r .status.loadBalancer.ingress[0].hostname)"
+
+echo "Get AWS name"
+aws_elb_name="$(echo $aws_elb_host|cut -d- -f1)"
+
+echo "Update timeout settings for elb"
+aws elb modify-load-balancer-attributes \
+    --profile "$JUJU_CREDENTIAL" \
+    --region "$JUJU_REGION" \
+    --load-balancer-name  "$aws_elb_name" \
+    --load-balancer-attributes "{\"ConnectionSettings\":{\"IdleTimeout\":1200}}"
+
+echo "get ip of load balancer, append .nip.io"
+hostname=$(host "$aws_elb_host")
+
+setKey "deis-register-url" "http://deis.$hostname.nip.io"
+
+# EXAMPLE TEST
+# $ git clone https://github.com/heroku/node-js-getting-started.git
+# $ cd node-js-getting-started/
+# $ deis create node-js-getting-started
+# $ git push deis master
+
+exit 0
